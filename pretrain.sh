@@ -30,7 +30,7 @@ data=$1  # omnitab_download/pretrain_data
 model=$2  # microsoft/tapex-large
 output=$3  # output/omnitab-large
 
-python -m torch.distributed.launch --nproc_per_node=8 run.py \
+python -m torch.distributed.launch --nproc_per_node=1 run.py \
   --do_train \
   --do_eval \
   --pretraindata_dir ${data} \

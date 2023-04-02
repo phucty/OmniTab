@@ -41,12 +41,14 @@ A target item T matches a predicted item P if one of the following is true:
 """
 __version__ = '1.0.2'
 
-import sys, os, re, argparse
+import argparse
+import os
+import re
+import sys
 import unicodedata
-from codecs import open
-from math import isnan, isinf
 from abc import ABCMeta, abstractmethod
-
+from codecs import open
+from math import isinf, isnan
 
 ################ String Normalization ################
 
@@ -350,7 +352,8 @@ def main():
                         help='On which split to evaluate prediction_path. Could be "test" or "validation"')
     parser.add_argument('--separator', default=', ',
                         help='Separator used to concat multiple answer entities')
-    parser.add_argument('prediction_path',
+    parser.add_argument('--prediction_path',
+                        default='omnitab_download/wtq/predictions_test/omnitab-large-finetuned-wtq.txt',
                         help='Path to the prediction file. Each line contains one prediction')
     args = parser.parse_args()
 

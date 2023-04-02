@@ -27,12 +27,12 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import List, Optional
 
+import debugpy
 import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 import pandas as pd
-from datasets import load_dataset
-
 import transformers
+from datasets import load_dataset
 from filelock import FileLock
 from transformers import (
     AutoConfig,
@@ -46,7 +46,18 @@ from transformers import (
 from transformers.file_utils import is_offline_mode
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
-from data_processor import OmnitabPretrainDataset, PretrainProcessor, TableQAProcessor, DataCollatorWithTargetToBeShifted
+
+from data_processor import (
+    DataCollatorWithTargetToBeShifted,
+    OmnitabPretrainDataset,
+    PretrainProcessor,
+    TableQAProcessor,
+)
+
+# debugpy.listen(5678)
+# print("Wait for client")
+# debugpy.wait_for_client()
+# print("Attached")
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -72,10 +83,15 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        },
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
     tokenizer_name: Optional[str] = field(
         default=None,
@@ -88,15 +104,21 @@ class ModelArguments:
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where to store the pretrained models downloaded from huggingface.co"},
+        metadata={
+            "help": "Where to store the pretrained models downloaded from huggingface.co"
+        },
     )
     use_fast_tokenizer: bool = field(
         default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+        metadata={
+            "help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
     use_auth_token: bool = field(
         default=False,
@@ -116,19 +138,30 @@ class DataTrainingArguments:
     """
 
     pretraindata_dir: Optional[str] = field(
-        default=None, metadata={"help": "The directory of OmniTab pretraining data containing natural.jsonl, synthetic.jsonl, and sql.jsonl."}
+        default=None,
+        metadata={
+            "help": "The directory of OmniTab pretraining data containing natural.jsonl, synthetic.jsonl, and sql.jsonl."
+        },
     )
     dataset_name: Optional[str] = field(
-        default="wikitablequestions", metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default=None,  # "wikitablequestions",
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
     train_ids_file: Optional[str] = field(
-        default=None, metadata={"help": "The file containing ids of training examples which is used to filter the training dataset."}
+        default=None,
+        metadata={
+            "help": "The file containing ids of training examples which is used to filter the training dataset."
+        },
     )
     train_file: Optional[str] = field(
-        default=None, metadata={"help": "The input training data file (a jsonlines or csv file)."}
+        default=None,
+        metadata={"help": "The input training data file (a jsonlines or csv file)."},
     )
     validation_file: Optional[str] = field(
         default=None,
@@ -146,12 +179,11 @@ class DataTrainingArguments:
     )
     do_predict_on: Optional[str] = field(
         default="test",
-        metadata={
-            "help": "On which split to run prediction."
-        },
+        metadata={"help": "On which split to run prediction."},
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -240,15 +272,27 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+        ):
+            raise ValueError(
+                "Need either a dataset name or a training/validation file."
+            )
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`train_file` should be a csv or a json file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`validation_file` should be a csv or a json file."
         if self.val_max_target_length is None:
             self.val_max_target_length = self.max_target_length
 
@@ -258,24 +302,34 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Detecting last checkpoint.
     last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    if (
+        os.path.isdir(training_args.output_dir)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
+    ):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+        elif (
+            last_checkpoint is not None and training_args.resume_from_checkpoint is None
+        ):
             logger.info(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
@@ -287,7 +341,9 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+    logger.setLevel(
+        logging.INFO if is_main_process(training_args.local_rank) else logging.WARN
+    )
 
     # Log on each process the small summary:
     logger.warning(
@@ -312,7 +368,11 @@ def main():
     # download the dataset.
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
+        datasets = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+        )
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -324,22 +384,26 @@ def main():
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
             extension = data_args.test_file.split(".")[-1]
-        datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
+        datasets = load_dataset(
+            extension, data_files=data_files, cache_dir=model_args.cache_dir
+        )
 
-    train_dataset = datasets['train'] if 'train' in datasets else None
-    eval_dataset = datasets['validation'] if 'validation' in datasets else None
-    if data_args.do_predict_on == 'test':
-        predict_dataset = datasets['test'] if 'test' in datasets else None
-    elif data_args.do_predict_on == 'validation':
-        predict_dataset = datasets['validation'] if 'validation' in datasets else None
+    train_dataset = datasets["train"] if "train" in datasets else None
+    eval_dataset = datasets["validation"] if "validation" in datasets else None
+    if data_args.do_predict_on == "test":
+        predict_dataset = datasets["test"] if "test" in datasets else None
+    elif data_args.do_predict_on == "validation":
+        predict_dataset = datasets["validation"] if "validation" in datasets else None
     else:
         raise NotImplementedError
 
     if data_args.train_ids_file:  # filter training dataset by ids for few-shot settings
-        ids = set(map(lambda x: x.strip(), open(data_args.train_ids_file, 'r')))
-        train_dataset = train_dataset.filter(lambda example: example['id'] in ids)
-        assert len(train_dataset) == len(ids), 'some ids do not exist in the training data'
-        logger.info(f'Filter training data down to {len(train_dataset)} examples')
+        ids = set(map(lambda x: x.strip(), open(data_args.train_ids_file, "r")))
+        train_dataset = train_dataset.filter(lambda example: example["id"] in ids)
+        assert len(train_dataset) == len(
+            ids
+        ), "some ids do not exist in the training data"
+        logger.info(f"Filter training data down to {len(train_dataset)} examples")
 
     if data_args.pretraindata_dir:  # use pretrain dataset as training dataset
         pretrain_dataset = OmnitabPretrainDataset(data_args.pretraindata_dir)
@@ -355,7 +419,9 @@ def main():
     # download model & vocab.
 
     config = AutoConfig.from_pretrained(
-        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
+        model_args.config_name
+        if model_args.config_name
+        else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
@@ -371,7 +437,9 @@ def main():
 
     # load tokenizer that always add a prefix space
     tokenizer = TapexTokenizer.from_pretrained(
-        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+        model_args.tokenizer_name
+        if model_args.tokenizer_name
+        else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
@@ -390,9 +458,13 @@ def main():
     )
 
     if model.config.decoder_start_token_id is None:
-        raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
+        raise ValueError(
+            "Make sure that `config.decoder_start_token_id` is correctly defined"
+        )
 
-    if training_args.label_smoothing_factor > 0 and not hasattr(model, "prepare_decoder_input_ids_from_labels"):
+    if training_args.label_smoothing_factor > 0 and not hasattr(
+        model, "prepare_decoder_input_ids_from_labels"
+    ):
         logger.warning(
             "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
             f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
@@ -401,14 +473,15 @@ def main():
     tableqa_processor = TableQAProcessor(
         tokenizer=tokenizer,
         max_source_length=data_args.max_source_length,
-        question_lower_case=False
+        question_lower_case=False,
     )
     if data_args.pretraindata_dir:
         if data_args.max_source_length != 1024:
-            logger.warning('OmniTab is pretrained with max_source_length=1024')
+            logger.warning("OmniTab is pretrained with max_source_length=1024")
         pretrain_processor = PretrainProcessor(
             max_source_length=data_args.max_source_length,  # max length of source
-            max_context_length=128)
+            max_context_length=128,
+        )
 
     if training_args.do_train:
         if train_dataset is None:
@@ -418,7 +491,8 @@ def main():
             train_dataset = pretrain_processor.process(
                 train_dataset,
                 num_proc=data_args.preprocessing_num_workers,
-                overwrite_cache=data_args.overwrite_cache)
+                overwrite_cache=data_args.overwrite_cache,
+            )
         else:  # finetune on table-QA datasets
             if data_args.max_train_samples is not None:
                 train_dataset = train_dataset.select(range(data_args.max_train_samples))
@@ -427,7 +501,8 @@ def main():
                 is_training=True,
                 max_target_length=data_args.max_target_length,
                 num_proc=data_args.preprocessing_num_workers,
-                overwrite_cache=data_args.overwrite_cache)
+                overwrite_cache=data_args.overwrite_cache,
+            )
 
     if training_args.do_eval:
         if eval_dataset is None:
@@ -439,29 +514,35 @@ def main():
             is_training=False,
             max_target_length=data_args.val_max_target_length,
             num_proc=data_args.preprocessing_num_workers,
-            overwrite_cache=data_args.overwrite_cache)
+            overwrite_cache=data_args.overwrite_cache,
+        )
 
     if training_args.do_predict:
         if predict_dataset is None:
             raise ValueError("--do_predict requires a test dataset")
         if data_args.max_predict_samples is not None:
-            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
+            predict_dataset = predict_dataset.select(
+                range(data_args.max_predict_samples)
+            )
         predict_dataset = tableqa_processor.process(
             predict_dataset,
             is_training=False,
             max_target_length=data_args.val_max_target_length,
             num_proc=data_args.preprocessing_num_workers,
-            overwrite_cache=data_args.overwrite_cache)
+            overwrite_cache=data_args.overwrite_cache,
+        )
 
     # Data collator
     assert not data_args.pad_to_max_length, NotImplementedError
-    label_pad_token_id = -100 if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id
+    label_pad_token_id = (
+        -100 if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id
+    )
     data_collator = DataCollatorWithTargetToBeShifted(
         tokenizer,
         model=model,
         label_pad_token_id=label_pad_token_id,
         pad_to_multiple_of=8 if training_args.fp16 else None,
-        target_field='target_input_ids',
+        target_field="target_input_ids",
     )
 
     def postprocess_text(preds, labels):
@@ -525,7 +606,9 @@ def main():
         eval_dataset=eval_dataset if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
-        compute_metrics=compute_metrics if training_args.predict_with_generate else None,
+        compute_metrics=compute_metrics
+        if training_args.predict_with_generate
+        else None,
     )
 
     if training_args.do_train:
@@ -539,7 +622,9 @@ def main():
 
         metrics = train_result.metrics
         max_train_samples = (
-            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+            data_args.max_train_samples
+            if data_args.max_train_samples is not None
+            else len(train_dataset)
         )
         metrics["train_samples"] = min(max_train_samples, len(train_dataset))
 
@@ -553,9 +638,15 @@ def main():
         logger.info("*** Evaluate ***")
 
         metrics = trainer.evaluate(
-            max_length=data_args.val_max_target_length, num_beams=data_args.num_beams, metric_key_prefix="eval"
+            max_length=data_args.val_max_target_length,
+            num_beams=data_args.num_beams,
+            metric_key_prefix="eval",
         )
-        max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
+        max_eval_samples = (
+            data_args.max_eval_samples
+            if data_args.max_eval_samples is not None
+            else len(eval_dataset)
+        )
         metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
 
         trainer.log_metrics("eval", metrics)
@@ -572,7 +663,9 @@ def main():
         )
         metrics = predict_results.metrics
         max_predict_samples = (
-            data_args.max_predict_samples if data_args.max_predict_samples is not None else len(predict_dataset)
+            data_args.max_predict_samples
+            if data_args.max_predict_samples is not None
+            else len(predict_dataset)
         )
         metrics["predict_samples"] = min(max_predict_samples, len(predict_dataset))
 
@@ -582,12 +675,18 @@ def main():
         if trainer.is_world_process_zero():
             if training_args.predict_with_generate:
                 predictions = tokenizer.batch_decode(
-                    predict_results.predictions, skip_special_tokens=True, clean_up_tokenization_spaces=True
+                    predict_results.predictions,
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=True,
                 )
                 predictions = [pred.strip() for pred in predictions]
-                output_prediction_file = os.path.join(training_args.output_dir, "predictions.txt")
+                output_prediction_file = os.path.join(
+                    training_args.output_dir, "predictions.txt"
+                )
                 with open(output_prediction_file, "w") as writer:
-                    writer.write('\n'.join(map(lambda x: x.replace('\n', ' '), predictions)))
+                    writer.write(
+                        "\n".join(map(lambda x: x.replace("\n", " "), predictions))
+                    )
 
     return results
 
